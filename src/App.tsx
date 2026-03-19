@@ -20,6 +20,57 @@ export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isSynced, setIsSynced] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+
+  const syncLocation = () => {
+    if (!("geolocation" in navigator)) {
+      setSyncStatus('error');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+      return;
+    }
+
+    setSyncStatus('syncing');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        
+        let closestCity = cityMapping[0];
+        let minDistance = Infinity;
+        
+        cityMapping.forEach(city => {
+          const lat = Number(city.lat);
+          const lng = Number(city.lng);
+          const distance = Math.sqrt(Math.pow(latitude - lat, 2) + Math.pow(longitude - lng, 2));
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestCity = city;
+          }
+        });
+        
+        if (closestCity && closestCity.timezone) {
+          setSourceZone(closestCity.timezone);
+          setLocalTime(DateTime.now().setZone(closestCity.timezone));
+          setSyncStatus('success');
+          setIsSynced(true);
+          setTimeout(() => {
+            setSyncStatus('idle');
+            setIsSynced(false);
+          }, 4000);
+        }
+      },
+      (error) => {
+        console.warn("Geolocation error:", error.message);
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 3000);
+      }
+    );
+  };
+
+  // Auto-sync on mount
+  useEffect(() => {
+    syncLocation();
+  }, []);
 
   const allTimezones = useMemo(() => {
     try {
@@ -202,6 +253,40 @@ export default function App() {
 
   return (
     <div className={`min-h-screen transition-colors duration-500 ${theme === 'light' ? 'bg-stone-50 text-stone-900' : 'bg-stone-950 text-stone-50'} font-sans selection:bg-stone-200`}>
+      {/* Sync Status Toast */}
+      <AnimatePresence>
+        {syncStatus !== 'idle' && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -50, x: '-50%' }}
+            className="fixed top-8 left-1/2 z-[100] pointer-events-none"
+          >
+            <div className={`px-6 py-3 rounded-full shadow-2xl border flex items-center gap-3 backdrop-blur-md ${
+              syncStatus === 'syncing' ? 'bg-white/90 border-stone-200 text-stone-600' :
+              syncStatus === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' :
+              'bg-rose-500/90 border-rose-400 text-white'
+            }`}>
+              {syncStatus === 'syncing' && (
+                <motion.div 
+                  animate={{ rotate: 360 }} 
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                >
+                  <Clock className="w-4 h-4" />
+                </motion.div>
+              )}
+              {syncStatus === 'success' && <MapPin className="w-4 h-4" />}
+              {syncStatus === 'error' && <Search className="w-4 h-4" />}
+              <span className="text-sm font-medium tracking-tight">
+                {syncStatus === 'syncing' ? 'Detecting your location...' :
+                 syncStatus === 'success' ? `Synced to ${sourceZone.split('/').pop()?.replace(/_/g, ' ')}` :
+                 'Location sync failed'}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="max-w-5xl mx-auto px-6 py-12 md:py-24 flex flex-col items-center">
         
         {/* Header */}
@@ -225,7 +310,7 @@ export default function App() {
             <input
               type="text"
               placeholder="Search for a city or timezone..."
-              className={`w-full pl-12 pr-4 py-4 border rounded-3xl shadow-sm focus:outline-none focus:ring-2 transition-all ${theme === 'light' ? 'bg-white border-stone-200 focus:ring-stone-200 focus:border-stone-300 text-stone-700 placeholder:text-stone-300' : 'bg-stone-900 border-stone-800 focus:ring-stone-800 focus:border-stone-700 text-stone-200 placeholder:text-stone-700'}`}
+              className={`w-full pl-12 pr-12 py-4 border rounded-3xl shadow-sm focus:outline-none focus:ring-2 transition-all ${theme === 'light' ? 'bg-white border-stone-200 focus:ring-stone-200 focus:border-stone-300 text-stone-700 placeholder:text-stone-300' : 'bg-stone-900 border-stone-800 focus:ring-stone-800 focus:border-stone-700 text-stone-200 placeholder:text-stone-700'}`}
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -233,6 +318,14 @@ export default function App() {
               }}
               onFocus={() => setIsSearching(true)}
             />
+            
+            <button
+              onClick={syncLocation}
+              title="Sync with your location"
+              className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all duration-300 ${theme === 'light' ? 'text-stone-400 hover:bg-stone-100 hover:text-stone-600' : 'text-stone-600 hover:bg-stone-800 hover:text-stone-400'}`}
+            >
+              <MapPin className={`w-4 h-4 ${syncStatus === 'syncing' ? 'animate-pulse text-emerald-500' : ''}`} />
+            </button>
 
             <AnimatePresence>
               {isSearching && searchQuery.length >= 2 && (
@@ -314,6 +407,15 @@ export default function App() {
             <div className={`flex items-center gap-2 mb-6 font-medium text-xs uppercase tracking-wider whitespace-nowrap ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>
               <MapPin className="w-3 h-3" />
               {sourceZone === DateTime.now().zoneName ? 'Your Local Time' : 'Your Time'}
+              {isSynced && (
+                <motion.span 
+                  initial={{ opacity: 0, x: -5 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="ml-2 text-[10px] bg-emerald-500/10 text-emerald-500 px-1.5 py-0.5 rounded-full"
+                >
+                  Synced
+                </motion.span>
+              )}
             </div>
             <div className={`text-5xl lg:text-7xl font-light tracking-tighter mb-4 tabular-nums whitespace-nowrap ${theme === 'light' ? 'text-stone-800' : 'text-stone-100'}`}>
               {localTime.toFormat('hh:mm:ss a')}

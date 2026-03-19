@@ -1,5 +1,5 @@
 {
   "name": "TimeSync",
   "description": "A minimal timezone comparison tool to see local and target times side-by-side.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["geolocation"]
 }
