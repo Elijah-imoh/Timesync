@@ -15,13 +15,14 @@ interface SearchResult {
 
 export default function App() {
   const [sourceZone, setSourceZone] = useState(DateTime.now().zoneName || 'UTC');
-  const [targetZone, setTargetZone] = useState('America/New_York');
+  const [targetZone, setTargetZone] = useState<string | null>(null);
   const [localTime, setLocalTime] = useState(DateTime.now().setZone(sourceZone));
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('12h');
 
   const syncLocation = () => {
     if (!("geolocation" in navigator)) {
@@ -173,29 +174,9 @@ export default function App() {
   // and the picker will modify it directly.
   // When switching back to live mode, the interval will take over.
 
-  const handleSwap = () => {
-    const oldSourceZone = sourceZone;
-    const oldTargetZone = targetZone;
-    
-    setSourceZone(oldTargetZone);
-    setTargetZone(oldSourceZone);
-    
-    // Maintain the moment by shifting localTime to the new source zone
-    setLocalTime(localTime.setZone(oldTargetZone));
-    
-    // Trigger rotation animation
-    setSwapRotation(prev => prev + 180);
-    
-    // Trigger ping effect
-    setShowPing(true);
-    setTimeout(() => setShowPing(false), 600);
-  };
-
   const [splitRatio, setSplitRatio] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
   const [isHoveringTarget, setIsHoveringTarget] = useState(false);
-  const [swapRotation, setSwapRotation] = useState(0);
-  const [showPing, setShowPing] = useState(false);
 
   // Handle dragging for resizing
   useEffect(() => {
@@ -226,30 +207,32 @@ export default function App() {
     };
   }, [isDragging]);
 
-  const targetTime = localTime.setZone(targetZone);
+  const targetTime = targetZone ? localTime.setZone(targetZone) : null;
 
   // Calculate time difference with minute precision
-  const totalDiffMinutes = targetTime.offset - localTime.offset;
-  const absDiffMinutes = Math.abs(totalDiffMinutes);
-  const hours = Math.floor(absDiffMinutes / 60);
-  const minutes = absDiffMinutes % 60;
+  const diffText = useMemo(() => {
+    if (!targetTime) return null;
+    const totalDiffMinutes = targetTime.offset - localTime.offset;
+    const absDiffMinutes = Math.abs(totalDiffMinutes);
+    const hours = Math.floor(absDiffMinutes / 60);
+    const minutes = absDiffMinutes % 60;
 
-  let diffText = '';
-  if (totalDiffMinutes === 0) {
-    diffText = 'Same time';
-  } else {
-    const parts = [];
-    if (hours > 0) {
-      parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
+    if (totalDiffMinutes === 0) {
+      return 'Same time';
+    } else {
+      const parts = [];
+      if (hours > 0) {
+        parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
+      }
+      if (minutes > 0) {
+        parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
+      }
+      return `${parts.join(' ')} ${totalDiffMinutes > 0 ? 'ahead' : 'behind'}`;
     }
-    if (minutes > 0) {
-      parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
-    }
-    diffText = `${parts.join(' ')} ${totalDiffMinutes > 0 ? 'ahead' : 'behind'}`;
-  }
+  }, [targetTime, localTime.offset]);
 
-  const targetOffset = targetTime.toFormat('ZZZZ');
-  const showOffset = targetTime.offset !== localTime.offset;
+  const targetOffset = targetTime?.toFormat('ZZZZ');
+  const showOffset = targetTime ? targetTime.offset !== localTime.offset : false;
 
   return (
     <div className={`min-h-screen transition-colors duration-500 ${theme === 'light' ? 'bg-stone-50 text-stone-900' : 'bg-stone-950 text-stone-50'} font-sans selection:bg-stone-200`}>
@@ -291,7 +274,13 @@ export default function App() {
         
         {/* Header */}
         <header className="mb-16 text-center relative w-full">
-          <div className="absolute right-0 top-0">
+          <div className="absolute right-0 top-0 flex items-center gap-3">
+            <button
+              onClick={() => setTimeFormat(prev => prev === '12h' ? '24h' : '12h')}
+              className={`px-4 py-2.5 rounded-2xl border text-[10px] font-bold uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-white border-stone-200 text-stone-400 hover:text-stone-600' : 'bg-stone-900 border-stone-800 text-stone-500 hover:text-stone-300'}`}
+            >
+              {timeFormat}
+            </button>
             <button
               onClick={toggleTheme}
               className={`p-3 rounded-2xl border transition-all ${theme === 'light' ? 'bg-white border-stone-200 text-stone-400 hover:text-stone-600' : 'bg-stone-900 border-stone-800 text-stone-500 hover:text-stone-300'}`}
@@ -367,27 +356,6 @@ export default function App() {
             </AnimatePresence>
           </div>
 
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            animate={{ rotate: swapRotation }}
-            transition={{ type: "spring", stiffness: 260, damping: 20 }}
-            onClick={handleSwap}
-            title="Swap timezones"
-            className={`p-4 border rounded-2xl shadow-sm transition-all shrink-0 relative overflow-visible ${theme === 'light' ? 'bg-white border-stone-200 text-stone-400 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-600' : 'bg-stone-900 border-stone-800 text-stone-600 hover:bg-stone-800 hover:border-stone-700 hover:text-stone-400'}`}
-          >
-            <ArrowRightLeft className="w-6 h-6" />
-            <AnimatePresence>
-              {showPing && (
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0.5 }}
-                  animate={{ scale: 2, opacity: 0 }}
-                  exit={{ opacity: 0 }}
-                  className={`absolute inset-0 rounded-2xl pointer-events-none ${theme === 'light' ? 'bg-stone-400/20' : 'bg-stone-400/10'}`}
-                />
-              )}
-            </AnimatePresence>
-          </motion.button>
         </div>
 
         {/* Comparison Cards Container */}
@@ -418,7 +386,7 @@ export default function App() {
               )}
             </div>
             <div className={`text-5xl lg:text-7xl font-light tracking-tighter mb-4 tabular-nums whitespace-nowrap ${theme === 'light' ? 'text-stone-800' : 'text-stone-100'}`}>
-              {localTime.toFormat('hh:mm:ss a')}
+              {localTime.toFormat(timeFormat === '12h' ? 'hh:mm:ss a' : 'HH:mm:ss')}
             </div>
             <div className={`mt-8 pt-6 border-t w-full text-sm font-medium truncate ${theme === 'light' ? 'border-stone-50 text-stone-500' : 'border-stone-800 text-stone-400'}`}>
               {sourceZone.replace(/_/g, ' ')}
@@ -436,42 +404,56 @@ export default function App() {
 
           {/* Target Card */}
           <motion.div 
-            key={`target-${targetZone}`}
+            key={`target-${targetZone || 'none'}`}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             style={{ flex: `0 0 ${100 - splitRatio}%` }}
-            className="bg-stone-900 p-8 rounded-[2rem] shadow-xl flex flex-col items-center text-center text-white relative overflow-hidden group transition-all duration-300 ease-out"
+            className={`p-8 rounded-[2rem] shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden group transition-all duration-500 ease-out ${targetZone ? 'bg-stone-900 text-white' : 'bg-stone-100/50 border-2 border-dashed border-stone-200 text-stone-400'}`}
             onMouseEnter={() => setIsHoveringTarget(true)}
             onMouseLeave={() => setIsHoveringTarget(false)}
           >
-            {/* Tooltip */}
-            <div className={`absolute top-6 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-xl border border-white/20 px-6 py-3 rounded-2xl text-[11px] font-medium text-white z-50 transition-all duration-500 shadow-2xl flex flex-col items-center gap-1 min-w-max ${isHoveringTarget ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95 pointer-events-none'}`}>
-              <span className="opacity-60 uppercase tracking-widest text-[9px]">Timezone Details</span>
-              <span className="text-white font-semibold">{targetZone.replace(/_/g, ' ')}</span>
-              <span className="text-stone-400">{targetTime.offsetNameLong} • {targetOffset}</span>
-            </div>
+            {targetZone && targetTime ? (
+              <>
+                {/* Tooltip */}
+                <div className={`absolute top-6 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-xl border border-white/20 px-6 py-3 rounded-2xl text-[11px] font-medium text-white z-50 transition-all duration-500 shadow-2xl flex flex-col items-center gap-1 min-w-max ${isHoveringTarget ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95 pointer-events-none'}`}>
+                  <span className="opacity-60 uppercase tracking-widest text-[9px]">Timezone Details</span>
+                  <span className="text-white font-semibold">{targetZone.replace(/_/g, ' ')}</span>
+                  <span className="text-stone-400">{targetTime.offsetNameLong} • {targetOffset}</span>
+                </div>
 
-            <div className="flex items-center gap-2 text-stone-500 mb-6 font-medium text-xs uppercase tracking-wider relative z-10 whitespace-nowrap">
-              <Clock className="w-3 h-3" />
-              Their Time
-            </div>
-            <div className="text-5xl lg:text-7xl font-light tracking-tighter text-white mb-4 tabular-nums relative z-10 whitespace-nowrap">
-              {targetTime.toFormat('hh:mm:ss a')}
-            </div>
-            <div className="mt-8 pt-6 border-t border-stone-800 w-full text-stone-400 text-sm font-medium relative z-10 truncate">
-              {targetZone}
-            </div>
+                <div className="flex items-center gap-2 text-stone-500 mb-6 font-medium text-xs uppercase tracking-wider relative z-10 whitespace-nowrap">
+                  Their Time
+                </div>
+                <div className="text-5xl lg:text-7xl font-light tracking-tighter text-white mb-4 tabular-nums relative z-10 whitespace-nowrap">
+                  {targetTime.toFormat(timeFormat === '12h' ? 'hh:mm:ss a' : 'HH:mm:ss')}
+                </div>
+                <div className="mt-8 pt-6 border-t border-stone-800 w-full text-stone-400 text-sm font-medium relative z-10 truncate">
+                  {targetZone.replace(/_/g, ' ')}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-4 py-12">
+                <div className="w-16 h-16 rounded-full bg-stone-200/50 flex items-center justify-center mb-2">
+                  <Clock className="w-8 h-8 text-stone-300" />
+                </div>
+                <p className="text-xl font-light italic text-stone-400">Select time to compare</p>
+              </div>
+            )}
           </motion.div>
 
         </div>
 
         {/* Time Difference Indicator */}
-        <div className={`mt-12 flex items-center gap-4 px-6 py-3 rounded-full shadow-sm border transition-all ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
-          <ArrowRightLeft className={`w-4 h-4 ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`} />
-          <span className={`font-medium text-sm ${theme === 'light' ? 'text-stone-600' : 'text-stone-400'}`}>
-            {diffText}
-          </span>
-        </div>
+        {diffText && (
+          <div className="mt-12 flex flex-col items-center gap-6">
+            <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-sm border transition-all ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
+              <ArrowRightLeft className={`w-4 h-4 ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`} />
+              <span className={`font-medium text-sm ${theme === 'light' ? 'text-stone-600' : 'text-stone-400'}`}>
+                {diffText}
+              </span>
+            </div>
+          </div>
+        )}
 
       </div>
 
