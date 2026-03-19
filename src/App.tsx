@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, ChangeEvent, useCallback, useRef } from 'react';
 import { DateTime } from 'luxon';
-import { Search, MapPin, Clock, ArrowRightLeft, Sun, Moon } from 'lucide-react';
+import { Search, MapPin, Clock, ArrowRightLeft, Sun, Moon, Share } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cityMapping } from 'city-timezones';
 
@@ -19,59 +19,140 @@ export default function App() {
   const [localTime, setLocalTime] = useState(DateTime.now().setZone(sourceZone));
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchField, setActiveSearchField] = useState<'source' | 'target'>('target');
   const [isSearching, setIsSearching] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [syncMessage, setSyncMessage] = useState('');
+  const [isLive, setIsLive] = useState(true);
   const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('12h');
+  const [recentSearches, setRecentSearches] = useState<SearchResult[]>([]);
 
-  const syncLocation = () => {
-    if (!("geolocation" in navigator)) {
-      setSyncStatus('error');
-      setTimeout(() => setSyncStatus('idle'), 3000);
-      return;
+  // Load recent searches on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('recentTimezones');
+    if (saved) {
+      try {
+        setRecentSearches(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse recent searches", e);
+      }
     }
+  }, []);
 
+  const addToRecent = (result: SearchResult) => {
+    setRecentSearches(prev => {
+      const filtered = prev.filter(r => r.timezone !== result.timezone);
+      const updated = [result, ...filtered].slice(0, 5);
+      localStorage.setItem('recentTimezones', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const syncLocation = useCallback(() => {
     setSyncStatus('syncing');
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        
-        let closestCity = cityMapping[0];
-        let minDistance = Infinity;
-        
-        cityMapping.forEach(city => {
-          const lat = Number(city.lat);
-          const lng = Number(city.lng);
-          const distance = Math.sqrt(Math.pow(latitude - lat, 2) + Math.pow(longitude - lng, 2));
-          if (distance < minDistance) {
-            minDistance = distance;
-            closestCity = city;
-          }
-        });
-        
-        if (closestCity && closestCity.timezone) {
-          setSourceZone(closestCity.timezone);
-          setLocalTime(DateTime.now().setZone(closestCity.timezone));
+    setSyncMessage('Detecting your location...');
+    
+    // Primary: Browser's resolved timezone (instant, no permissions)
+    try {
+      const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (browserTz && browserTz !== 'undefined') {
+        const testTime = DateTime.now().setZone(browserTz);
+        if (testTime.isValid) {
+          setSourceZone(browserTz);
+          setLocalTime(testTime);
           setSyncStatus('success');
+          setSyncMessage(`Synced to ${browserTz.split('/').pop()?.replace(/_/g, ' ')}`);
           setIsSynced(true);
           setTimeout(() => {
             setSyncStatus('idle');
             setIsSynced(false);
           }, 4000);
+          return;
         }
+      }
+    } catch (e) {
+      console.warn("Intl timezone detection failed:", e);
+    }
+
+    // Secondary: Geolocation (requires permission)
+    if (!("geolocation" in navigator)) {
+      setSyncStatus('error');
+      setSyncMessage('Location sync failed');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        
+        let closestCity = null;
+        let minDistance = Infinity;
+        
+        if (cityMapping && Array.isArray(cityMapping)) {
+          cityMapping.forEach(city => {
+            const lat = Number(city.lat);
+            const lng = Number(city.lng);
+            if (!isNaN(lat) && !isNaN(lng)) {
+              const distance = Math.sqrt(Math.pow(latitude - lat, 2) + Math.pow(longitude - lng, 2));
+              if (distance < minDistance) {
+                minDistance = distance;
+                closestCity = city;
+              }
+            }
+          });
+        }
+        
+        if (closestCity && closestCity.timezone) {
+          const testTime = DateTime.now().setZone(closestCity.timezone);
+          if (testTime.isValid) {
+            setSourceZone(closestCity.timezone);
+            setLocalTime(testTime);
+            setSyncStatus('success');
+            setSyncMessage(`Synced to ${closestCity.timezone.split('/').pop()?.replace(/_/g, ' ')}`);
+            setIsSynced(true);
+            setTimeout(() => {
+              setSyncStatus('idle');
+              setIsSynced(false);
+            }, 4000);
+            return;
+          }
+        }
+        
+        setSyncStatus('error');
+        setSyncMessage('Location sync failed');
+        setTimeout(() => setSyncStatus('idle'), 3000);
       },
       (error) => {
         console.warn("Geolocation error:", error.message);
         setSyncStatus('error');
+        setSyncMessage('Location sync failed');
         setTimeout(() => setSyncStatus('idle'), 3000);
-      }
+      },
+      { timeout: 10000, enableHighAccuracy: false }
     );
-  };
+  }, [cityMapping]);
 
-  // Auto-sync on mount
+  // Auto-sync or load from URL on mount
   useEffect(() => {
-    syncLocation();
-  }, []);
+    const params = new URLSearchParams(window.location.search);
+    const src = params.get('src');
+    const tgt = params.get('tgt');
+    
+    if (src || tgt) {
+      if (src) {
+        setSourceZone(src);
+        setLocalTime(DateTime.now().setZone(src));
+      }
+      if (tgt) setTargetZone(tgt);
+      
+      // Clear URL params to keep it clean after loading
+      window.history.replaceState({}, '', window.location.pathname);
+    } else {
+      syncLocation();
+    }
+  }, [syncLocation]);
 
   const allTimezones = useMemo(() => {
     try {
@@ -160,19 +241,69 @@ export default function App() {
 
   // Update time every second
   useEffect(() => {
+    if (!isLive) return;
     const timer = setInterval(() => {
       setLocalTime(DateTime.now().setZone(sourceZone));
     }, 1000);
     return () => clearInterval(timer);
-  }, [sourceZone]);
+  }, [sourceZone, isLive]);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  // When switching to manual mode, localTime remains at its current value
-  // and the picker will modify it directly.
-  // When switching back to live mode, the interval will take over.
+  const handleTimeSelect = (hour: number, minute: number, zone: 'source' | 'target') => {
+    setIsLive(false);
+    if (zone === 'source') {
+      const newTime = localTime.set({ hour, minute, second: 0 });
+      setLocalTime(newTime);
+    } else if (zone === 'target' && targetZone) {
+      const currentTargetTime = localTime.setZone(targetZone);
+      const newTargetTime = currentTargetTime.set({ hour, minute, second: 0 });
+      setLocalTime(newTargetTime.setZone(sourceZone));
+    }
+  };
+
+  const handleAmPmChange = (zone: 'source' | 'target', newAmPm: string) => {
+    setIsLive(false);
+    const isPm = newAmPm === 'PM';
+    
+    if (zone === 'source') {
+      let hour = localTime.hour % 12;
+      if (isPm) hour += 12;
+      setLocalTime(localTime.set({ hour }));
+    } else if (targetZone) {
+      const currentTargetTime = localTime.setZone(targetZone);
+      let hour = currentTargetTime.hour % 12;
+      if (isPm) hour += 12;
+      const newTargetTime = currentTargetTime.set({ hour });
+      setLocalTime(newTargetTime.setZone(sourceZone));
+    }
+  };
+
+  const returnToLive = () => {
+    setIsLive(true);
+    setLocalTime(DateTime.now().setZone(sourceZone));
+  };
+
+  const handleShare = () => {
+    const url = new URL(window.location.origin + window.location.pathname);
+    url.searchParams.set('src', sourceZone);
+    if (targetZone) {
+      url.searchParams.set('tgt', targetZone);
+    }
+    
+    navigator.clipboard.writeText(url.toString()).then(() => {
+      setSyncStatus('success');
+      setSyncMessage('Share link copied to clipboard!');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    }).catch(err => {
+      console.error('Failed to copy: ', err);
+      setSyncStatus('error');
+      setSyncMessage('Failed to copy link');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    });
+  };
 
   const [splitRatio, setSplitRatio] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
@@ -208,6 +339,28 @@ export default function App() {
   }, [isDragging]);
 
   const targetTime = targetZone ? localTime.setZone(targetZone) : null;
+
+  const handleSwap = () => {
+    if (!targetZone) return;
+    const oldSource = sourceZone;
+    const oldTarget = targetZone;
+    const currentTargetTime = targetTime;
+    
+    setSourceZone(oldTarget);
+    setTargetZone(oldSource);
+    if (currentTargetTime) {
+      setLocalTime(currentTargetTime);
+    }
+  };
+
+  const conversionSummary = useMemo(() => {
+    if (!targetZone || !targetTime) return null;
+    const fromTime = localTime.toFormat(timeFormat === '12h' ? 'hh:mm a' : 'HH:mm');
+    const toTime = targetTime.toFormat(timeFormat === '12h' ? 'hh:mm a' : 'HH:mm');
+    const fromName = sourceZone.split('/').pop()?.replace(/_/g, ' ');
+    const toName = targetZone.split('/').pop()?.replace(/_/g, ' ');
+    return `${fromTime} (${fromName}) = ${toTime} (${toName})`;
+  }, [localTime, targetTime, sourceZone, targetZone, timeFormat]);
 
   // Calculate time difference with minute precision
   const diffText = useMemo(() => {
@@ -261,9 +414,7 @@ export default function App() {
               {syncStatus === 'success' && <MapPin className="w-4 h-4" />}
               {syncStatus === 'error' && <Search className="w-4 h-4" />}
               <span className="text-sm font-medium tracking-tight">
-                {syncStatus === 'syncing' ? 'Detecting your location...' :
-                 syncStatus === 'success' ? `Synced to ${sourceZone.split('/').pop()?.replace(/_/g, ' ')}` :
-                 'Location sync failed'}
+                {syncMessage}
               </span>
             </div>
           </motion.div>
@@ -277,85 +428,197 @@ export default function App() {
           <div className="absolute right-0 top-0 flex items-center gap-3">
             <button
               onClick={() => setTimeFormat(prev => prev === '12h' ? '24h' : '12h')}
-              className={`px-4 py-2.5 rounded-2xl border text-[10px] font-bold uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-white border-stone-200 text-stone-400 hover:text-stone-600' : 'bg-stone-900 border-stone-800 text-stone-500 hover:text-stone-300'}`}
+              className={`px-4 py-2.5 rounded-2xl border text-[10px] font-bold uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-[#1c1917] border-stone-800 text-white hover:bg-stone-800' : 'bg-[#1c1917] border-stone-800 text-stone-500 hover:text-stone-300'}`}
             >
               {timeFormat}
             </button>
             <button
+              onClick={handleShare}
+              className={`p-3 rounded-2xl border transition-all ${theme === 'light' ? 'bg-[#1c1917] border-stone-800 text-white hover:bg-stone-800' : 'bg-[#1c1917] border-stone-800 text-stone-500 hover:text-stone-300'}`}
+              title="Share comparison"
+            >
+              <Share className="w-5 h-5" />
+            </button>
+            <button
               onClick={toggleTheme}
-              className={`p-3 rounded-2xl border transition-all ${theme === 'light' ? 'bg-white border-stone-200 text-stone-400 hover:text-stone-600' : 'bg-stone-900 border-stone-800 text-stone-500 hover:text-stone-300'}`}
+              className={`p-3 rounded-2xl border transition-all ${theme === 'light' ? 'bg-[#1c1917] border-stone-800 text-white hover:bg-stone-800' : 'bg-[#1c1917] border-stone-800 text-stone-500 hover:text-stone-300'}`}
             >
               {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
             </button>
           </div>
-          <h1 className={`text-sm font-medium uppercase tracking-[0.2em] mb-2 ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>TimeSync</h1>
+          <h1 className={`text-sm font-medium tracking-[0.2em] mb-2 ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>Timesync</h1>
           <p className={`text-2xl font-light italic ${theme === 'light' ? 'text-stone-600' : 'text-stone-400'}`}>Compare moments across the globe.</p>
         </header>
 
         {/* Search & Swap Section */}
-        <div className="flex items-center gap-4 w-full max-w-2xl mb-16 relative z-50">
-          <div className="relative flex-1 group">
-            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${theme === 'light' ? 'text-stone-400 group-focus-within:text-stone-600' : 'text-stone-600 group-focus-within:text-stone-400'}`} />
-            <input
-              type="text"
-              placeholder="Search for a city or timezone..."
-              className={`w-full pl-12 pr-12 py-4 border rounded-3xl shadow-sm focus:outline-none focus:ring-2 transition-all ${theme === 'light' ? 'bg-white border-stone-200 focus:ring-stone-200 focus:border-stone-300 text-stone-700 placeholder:text-stone-300' : 'bg-stone-900 border-stone-800 focus:ring-stone-800 focus:border-stone-700 text-stone-200 placeholder:text-stone-700'}`}
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setIsSearching(true);
-              }}
-              onFocus={() => setIsSearching(true)}
-            />
-            
+        <div className="w-full max-w-2xl mb-16 space-y-6">
+          <div className="flex flex-col md:flex-row items-center gap-4 relative z-50">
+            {/* Source Search */}
+            <div className="relative flex-1 group w-full">
+              <div className={`absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none ${theme === 'light' ? 'text-stone-400 group-focus-within:text-stone-600' : 'text-stone-600 group-focus-within:text-stone-400'}`}>
+                <Search className="w-4 h-4" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">From</span>
+              </div>
+              <input
+                type="text"
+                placeholder="Source city..."
+                className={`w-full pl-20 pr-12 py-4 border rounded-3xl shadow-sm focus:outline-none focus:ring-2 transition-all ${theme === 'light' ? 'bg-white border-stone-200 focus:ring-stone-200 focus:border-stone-300 text-stone-700 placeholder:text-stone-300' : 'bg-stone-900 border-stone-800 focus:ring-stone-800 focus:border-stone-700 text-stone-200 placeholder:text-stone-700'}`}
+                value={activeSearchField === 'source' ? searchQuery : sourceZone.split('/').pop()?.replace(/_/g, ' ') || ''}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearching(true);
+                  setActiveSearchField('source');
+                }}
+                onFocus={() => {
+                  setIsSearching(true);
+                  setActiveSearchField('source');
+                  setSearchQuery('');
+                }}
+              />
+              <button
+                onClick={syncLocation}
+                title="Sync with your location"
+                className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all duration-300 ${theme === 'light' ? 'text-stone-400 hover:bg-stone-100 hover:text-stone-600' : 'text-stone-600 hover:bg-stone-800 hover:text-stone-400'}`}
+              >
+                <MapPin className={`w-4 h-4 ${syncStatus === 'syncing' ? 'animate-pulse text-emerald-500' : ''}`} />
+              </button>
+            </div>
+
+            {/* Swap Button */}
             <button
-              onClick={syncLocation}
-              title="Sync with your location"
-              className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all duration-300 ${theme === 'light' ? 'text-stone-400 hover:bg-stone-100 hover:text-stone-600' : 'text-stone-600 hover:bg-stone-800 hover:text-stone-400'}`}
+              onClick={handleSwap}
+              disabled={!targetZone}
+              className={`p-4 rounded-full border shadow-sm transition-all hover:scale-110 active:scale-95 disabled:opacity-30 disabled:hover:scale-100 ${theme === 'light' ? 'bg-white border-stone-200 text-stone-400 hover:text-stone-600' : 'bg-stone-900 border-stone-800 text-stone-600 hover:text-stone-400'}`}
             >
-              <MapPin className={`w-4 h-4 ${syncStatus === 'syncing' ? 'animate-pulse text-emerald-500' : ''}`} />
+              <ArrowRightLeft className="w-5 h-5" />
             </button>
 
-            <AnimatePresence>
-              {isSearching && searchQuery.length >= 2 && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className={`absolute top-full left-0 right-0 mt-3 border rounded-3xl shadow-2xl overflow-hidden z-50 ${theme === 'light' ? 'bg-white border-stone-200' : 'bg-stone-900 border-stone-800'}`}
-                >
-                  {searchResults.length > 0 ? (
-                    searchResults.map((result, idx) => (
-                      <button
-                        key={`${result.timezone}-${idx}`}
-                        className={`w-full px-6 py-4 text-left transition-colors border-b last:border-0 flex items-center justify-between ${theme === 'light' ? 'hover:bg-stone-50 border-stone-100' : 'hover:bg-stone-800 border-stone-800'}`}
-                        onClick={() => {
-                          setTargetZone(result.timezone);
-                          setSearchQuery('');
-                          setIsSearching(false);
-                        }}
-                      >
-                        <div className="flex flex-col">
-                          <span className={`text-sm font-medium ${theme === 'light' ? 'text-stone-700' : 'text-stone-200'}`}>{result.name}</span>
-                          {result.type === 'city' && (
-                            <span className={`text-[10px] uppercase tracking-wider ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>{result.country} • {result.timezone}</span>
-                          )}
-                        </div>
-                        <div className={`text-[10px] font-medium uppercase tracking-widest ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>
-                          {result.type}
-                        </div>
-                      </button>
-                    ))
-                  ) : (
-                    <div className={`p-6 text-center text-sm ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>
-                      No results found
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Target Search */}
+            <div className="relative flex-1 group w-full">
+              <div className={`absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none ${theme === 'light' ? 'text-stone-400 group-focus-within:text-stone-600' : 'text-stone-600 group-focus-within:text-stone-400'}`}>
+                <Search className="w-4 h-4" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">To</span>
+              </div>
+              <input
+                type="text"
+                placeholder="Target city..."
+                className={`w-full pl-16 pr-4 py-4 border rounded-3xl shadow-sm focus:outline-none focus:ring-2 transition-all ${theme === 'light' ? 'bg-white border-stone-200 focus:ring-stone-200 focus:border-stone-300 text-stone-700 placeholder:text-stone-300' : 'bg-stone-900 border-stone-800 focus:ring-stone-800 focus:border-stone-700 text-stone-200 placeholder:text-stone-700'}`}
+                value={activeSearchField === 'target' ? searchQuery : targetZone?.split('/').pop()?.replace(/_/g, ' ') || ''}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearching(true);
+                  setActiveSearchField('target');
+                }}
+                onFocus={() => {
+                  setIsSearching(true);
+                  setActiveSearchField('target');
+                  setSearchQuery('');
+                }}
+              />
+
+              <AnimatePresence>
+                {isSearching && searchQuery.length >= 2 && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className={`absolute top-full left-0 right-0 mt-3 border rounded-3xl shadow-2xl overflow-hidden z-50 ${theme === 'light' ? 'bg-white border-stone-200' : 'bg-stone-900 border-stone-800'}`}
+                  >
+                    {searchResults.length > 0 ? (
+                      searchResults.map((result, idx) => (
+                        <button
+                          key={`${result.timezone}-${idx}`}
+                          className={`w-full px-6 py-4 text-left transition-colors border-b last:border-0 flex items-center justify-between ${theme === 'light' ? 'hover:bg-stone-50 border-stone-100' : 'hover:bg-stone-800 border-stone-800'}`}
+                          onClick={() => {
+                            if (activeSearchField === 'source') {
+                              setSourceZone(result.timezone);
+                              setLocalTime(DateTime.now().setZone(result.timezone));
+                            } else {
+                              setTargetZone(result.timezone);
+                            }
+                            setSearchQuery('');
+                            setIsSearching(false);
+                            addToRecent(result);
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span className={`text-sm font-medium ${theme === 'light' ? 'text-stone-700' : 'text-stone-200'}`}>{result.name}</span>
+                            {result.type === 'city' && (
+                              <span className={`text-[10px] uppercase tracking-wider ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>{result.country} • {result.timezone}</span>
+                            )}
+                          </div>
+                          <div className={`text-[10px] font-medium uppercase tracking-widest ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>
+                            {result.type}
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className={`p-6 text-center text-sm ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>
+                        No results found
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
+          {/* Conversion Summary Display */}
+          <AnimatePresence>
+            {conversionSummary && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="flex justify-center"
+              >
+                <div className={`px-8 py-4 rounded-2xl border shadow-lg flex items-center gap-4 ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
+                  <Clock className="w-5 h-5 text-emerald-500" />
+                  <span className={`text-lg font-light tracking-tight ${theme === 'light' ? 'text-stone-800' : 'text-stone-100'}`}>
+                    {conversionSummary}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Recent Searches */}
+
+          <AnimatePresence>
+            {recentSearches.length > 0 && !isSearching && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-wrap justify-center gap-2 mt-4"
+              >
+                <span className={`text-[10px] font-bold tracking-widest self-center mr-2 ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>Recent:</span>
+                <button
+                  onClick={() => {
+                    setRecentSearches([]);
+                    localStorage.removeItem('recentTimezones');
+                  }}
+                  className={`px-2 py-1 rounded-md text-[8px] font-bold uppercase tracking-wider transition-all ${theme === 'light' ? 'bg-[#1c1917] text-white hover:bg-stone-800' : 'bg-[#1c1917] text-stone-100 hover:bg-stone-800'}`}
+                >
+                  Clear
+                </button>
+                {recentSearches.map((recent) => (
+                  <button
+                    key={recent.timezone}
+                    onClick={() => setTargetZone(recent.timezone)}
+                    className={`px-3 py-1.5 rounded-full text-[10px] font-medium transition-all border ${
+                      targetZone === recent.timezone 
+                        ? 'bg-emerald-500 border-emerald-400 text-white shadow-sm' 
+                        : theme === 'light' 
+                          ? 'bg-white border-stone-100 text-stone-500 hover:border-stone-200 hover:text-stone-700' 
+                          : 'bg-stone-900 border-stone-800 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                    }`}
+                  >
+                    {recent.name.split(',')[0]}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Comparison Cards Container */}
@@ -424,7 +687,9 @@ export default function App() {
                 <div className="flex items-center gap-2 text-stone-500 mb-6 font-medium text-xs uppercase tracking-wider relative z-10 whitespace-nowrap">
                   Their Time
                 </div>
-                <div className="text-5xl lg:text-7xl font-light tracking-tighter text-white mb-4 tabular-nums relative z-10 whitespace-nowrap">
+                <div 
+                  className="text-5xl lg:text-7xl font-light tracking-tighter text-white mb-4 tabular-nums relative z-10 whitespace-nowrap"
+                >
                   {targetTime.toFormat(timeFormat === '12h' ? 'hh:mm:ss a' : 'HH:mm:ss')}
                 </div>
                 <div className="mt-8 pt-6 border-t border-stone-800 w-full text-stone-400 text-sm font-medium relative z-10 truncate">
@@ -443,17 +708,147 @@ export default function App() {
 
         </div>
 
-        {/* Time Difference Indicator */}
-        {diffText && (
-          <div className="mt-12 flex flex-col items-center gap-6">
-            <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-sm border transition-all ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
-              <ArrowRightLeft className={`w-4 h-4 ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`} />
-              <span className={`font-medium text-sm ${theme === 'light' ? 'text-stone-600' : 'text-stone-400'}`}>
-                {diffText}
-              </span>
+        {/* Time Difference Indicator & Manual Controls */}
+        <div className="mt-12 flex flex-col items-center gap-8 w-full max-w-4xl">
+          <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-sm border transition-all ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
+            <ArrowRightLeft className={`w-4 h-4 ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`} />
+            <span className={`font-medium text-sm ${theme === 'light' ? 'text-stone-600' : 'text-stone-400'}`}>
+              {diffText}
+            </span>
+          </div>
+
+          {/* Manual Time Control Card - Standalone */}
+          <div className="w-fit">
+            <div className={`p-5 rounded-3xl shadow-xl border transition-all ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
+              <div className="flex flex-col items-center">
+                <div className="w-fit space-y-4">
+                  <div className="flex items-center justify-between gap-6">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-[9px] font-bold uppercase tracking-[0.2em] ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>Manual Adjustment</span>
+                      {!isLive && (
+                        <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 text-[9px] font-bold uppercase rounded-md">Manual Mode</span>
+                      )}
+                      {isLive && (
+                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 text-[9px] font-bold uppercase rounded-md">Live Sync</span>
+                      )}
+                    </div>
+                    {!isLive && (
+                      <button 
+                        onClick={returnToLive}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500/20 transition-all text-[10px] font-bold uppercase tracking-widest"
+                      >
+                        <Clock className="w-3 h-3" />
+                        Return to Live
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 max-w-md">
+                    {/* Hour Input */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <label className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-stone-500' : 'text-stone-400'}`}>Hour</label>
+                          <span className={`text-[9px] ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>({timeFormat === '12h' ? '1-12' : '0-23'})</span>
+                        </div>
+                        {timeFormat === '12h' && (
+                          <div className="flex bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5">
+                            {['AM', 'PM'].map((period) => (
+                              <button
+                                key={period}
+                                onClick={() => handleAmPmChange('source', period)}
+                                className={`px-1.5 py-0.5 rounded-md text-[8px] font-bold transition-all ${
+                                  (period === 'AM' && localTime.hour < 12) || (period === 'PM' && localTime.hour >= 12)
+                                    ? 'bg-[#4f4f4f] text-white shadow-sm'
+                                    : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-200'
+                                }`}
+                              >
+                                {period}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          min={timeFormat === '12h' ? 1 : 0}
+                          max={timeFormat === '12h' ? 12 : 23}
+                          value={timeFormat === '12h' ? (localTime.hour % 12 || 12) : localTime.hour}
+                          onChange={(e) => {
+                            let val = parseInt(e.target.value);
+                            if (isNaN(val)) return;
+                            
+                            if (timeFormat === '12h') {
+                              if (val < 1) val = 1;
+                              if (val > 12) val = 12;
+                              const isPm = localTime.hour >= 12;
+                              let newHour = val % 12;
+                              if (isPm) newHour += 12;
+                              handleTimeSelect(newHour, localTime.minute, 'source');
+                            } else {
+                              if (val < 0) val = 0;
+                              if (val > 23) val = 23;
+                              handleTimeSelect(val, localTime.minute, 'source');
+                            }
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl border font-mono text-sm transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
+                            theme === 'light' 
+                              ? 'bg-stone-50 border-stone-100 text-stone-800' 
+                              : 'bg-stone-800/50 border-stone-700 text-stone-100'
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Minute Input */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <label className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-stone-500' : 'text-stone-400'}`}>Minute</label>
+                          <span className={`text-[9px] ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>(0-59)</span>
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          min="0" 
+                          max="59" 
+                          value={localTime.minute}
+                          onChange={(e) => {
+                            let val = parseInt(e.target.value);
+                            if (isNaN(val)) return;
+                            if (val < 0) val = 0;
+                            if (val > 59) val = 59;
+                            handleTimeSelect(localTime.hour, val, 'source');
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl border font-mono text-sm transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
+                            theme === 'light' 
+                              ? 'bg-stone-50 border-stone-100 text-stone-800' 
+                              : 'bg-stone-800/50 border-stone-700 text-stone-100'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        )}
+
+          <AnimatePresence>
+            {isLive && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}
+              >
+                Live Sync Active
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
       </div>
 
