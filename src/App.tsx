@@ -28,7 +28,7 @@ function TimezoneInfoCard({ zone, theme, timeFormat }: { zone: string; theme: 'l
   }, [zone]);
 
   return (
-    <div className={`p-6 rounded-[2rem] border transition-all hover:shadow-md ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
+    <div className={`p-6 rounded-[2rem] transition-all hover:shadow-md ${theme === 'light' ? 'bg-white' : 'bg-stone-900'}`}>
       <div className="flex items-center justify-between mb-6">
         <h3 className={`text-[10px] font-bold uppercase tracking-[0.2em] ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>
           {zone.split('/').pop()?.replace(/_/g, ' ')}
@@ -49,7 +49,7 @@ function TimezoneInfoCard({ zone, theme, timeFormat }: { zone: string; theme: 'l
           <span className={`text-xs font-mono font-medium ${theme === 'light' ? 'text-stone-800' : 'text-stone-100'}`}>{offset}</span>
         </div>
         
-        <div className="pt-4 border-t border-stone-50 dark:border-stone-800">
+        <div className="pt-4">
           <span className={`text-[9px] font-bold uppercase tracking-widest block mb-2 ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>Major Cities</span>
           <p className={`text-xs leading-relaxed ${theme === 'light' ? 'text-stone-600' : 'text-stone-400'}`}>
             {commonCities || 'No major cities listed'}
@@ -440,7 +440,7 @@ export default function App() {
         <header className="mb-16 text-center relative w-full">
             <div className="absolute right-0 top-0 flex items-center gap-3">
               {/* Time Format Toggle */}
-              <div className={`flex p-1 rounded-2xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+              <div className={`flex p-1 rounded-2xl transition-all ${theme === 'light' ? 'bg-stone-100' : 'bg-stone-900'}`}>
                 {(['12h', '24h'] as const).map((format) => (
                   <button
                     key={format}
@@ -457,7 +457,7 @@ export default function App() {
               </div>
 
               {/* Share Button */}
-              <div className={`flex p-1 rounded-2xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+              <div className={`flex p-1 rounded-2xl transition-all ${theme === 'light' ? 'bg-stone-100' : 'bg-stone-900'}`}>
                 <button
                   onClick={handleShare}
                   className={`px-3 py-1.5 rounded-xl transition-all ${theme === 'light' ? 'text-stone-400 hover:bg-white hover:text-stone-900 hover:shadow-sm' : 'text-stone-600 hover:bg-stone-800 hover:text-white hover:shadow-sm'}`}
@@ -468,7 +468,7 @@ export default function App() {
               </div>
 
               {/* Theme Toggle */}
-              <div className={`flex p-1 rounded-2xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+              <div className={`flex p-1 rounded-2xl transition-all ${theme === 'light' ? 'bg-stone-100' : 'bg-stone-900'}`}>
                 {(['light', 'dark'] as const).map((t) => (
                   <button
                     key={t}
@@ -500,7 +500,7 @@ export default function App() {
               <input
                 type="text"
                 placeholder="Source city..."
-                className={`w-full pl-20 pr-12 py-4 border rounded-3xl shadow-sm focus:outline-none focus:ring-2 transition-all ${theme === 'light' ? 'bg-white border-stone-200 focus:ring-stone-200 focus:border-stone-300 text-stone-700 placeholder:text-stone-300' : 'bg-stone-900 border-stone-800 focus:ring-stone-800 focus:border-stone-700 text-stone-200 placeholder:text-stone-700'}`}
+                className={`w-full pl-20 pr-12 py-4 rounded-3xl shadow-sm focus:outline-none focus:ring-2 transition-all ${theme === 'light' ? 'bg-white focus:ring-stone-200 text-stone-700 placeholder:text-stone-300' : 'bg-stone-900 focus:ring-stone-800 text-stone-200 placeholder:text-stone-700'}`}
                 value={activeSearchField === 'source' ? searchQuery : sourceZone.split('/').pop()?.replace(/_/g, ' ') || ''}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -526,7 +526,7 @@ export default function App() {
             <button
               onClick={handleSwap}
               disabled={!targetZone}
-              className={`p-4 rounded-full border shadow-sm transition-all hover:scale-110 active:scale-95 disabled:opacity-30 disabled:hover:scale-100 ${theme === 'light' ? 'bg-white border-stone-200 text-stone-400 hover:text-stone-600' : 'bg-stone-900 border-stone-800 text-stone-600 hover:text-stone-400'}`}
+              className={`p-4 rounded-full shadow-sm transition-all hover:scale-110 active:scale-95 disabled:opacity-30 disabled:hover:scale-100 ${theme === 'light' ? 'bg-white text-stone-400 hover:text-stone-600' : 'bg-stone-900 text-stone-600 hover:text-stone-400'}`}
             >
               <ArrowRightLeft className="w-5 h-5" />
             </button>
@@ -540,7 +540,7 @@ export default function App() {
               <input
                 type="text"
                 placeholder="Target city..."
-                className={`w-full pl-16 pr-4 py-4 border rounded-3xl shadow-sm focus:outline-none focus:ring-2 transition-all ${theme === 'light' ? 'bg-white border-stone-200 focus:ring-stone-200 focus:border-stone-300 text-stone-700 placeholder:text-stone-300' : 'bg-stone-900 border-stone-800 focus:ring-stone-800 focus:border-stone-700 text-stone-200 placeholder:text-stone-700'}`}
+                className={`w-full pl-16 pr-4 py-4 rounded-3xl shadow-sm focus:outline-none focus:ring-2 transition-all ${theme === 'light' ? 'bg-white focus:ring-stone-200 text-stone-700 placeholder:text-stone-300' : 'bg-stone-900 focus:ring-stone-800 text-stone-200 placeholder:text-stone-700'}`}
                 value={activeSearchField === 'target' ? searchQuery : targetZone?.split('/').pop()?.replace(/_/g, ' ') || ''}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -560,7 +560,7 @@ export default function App() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className={`absolute top-full left-0 right-0 mt-3 border rounded-3xl shadow-2xl overflow-hidden z-50 ${theme === 'light' ? 'bg-white border-stone-200' : 'bg-stone-900 border-stone-800'}`}
+                    className={`absolute top-full left-0 right-0 mt-3 rounded-3xl shadow-2xl overflow-hidden z-50 ${theme === 'light' ? 'bg-white' : 'bg-stone-900'}`}
                   >
                     {isSearchingResults ? (
                       <div className="p-4 space-y-3">
@@ -575,7 +575,7 @@ export default function App() {
                       searchResults.map((result, idx) => (
                         <button
                           key={`${result.timezone}-${idx}`}
-                          className={`w-full px-6 py-4 text-left transition-colors border-b last:border-0 flex items-center justify-between ${theme === 'light' ? 'hover:bg-stone-50 border-stone-100' : 'hover:bg-stone-800 border-stone-800'}`}
+                          className={`w-full px-6 py-4 text-left transition-colors flex items-center justify-between ${theme === 'light' ? 'hover:bg-stone-50' : 'hover:bg-stone-800'}`}
                           onClick={() => {
                             if (activeSearchField === 'source') {
                               setSourceZone(result.timezone);
@@ -624,8 +624,8 @@ export default function App() {
                 {recentSearches.map((recent) => (
                   <div
                     key={recent.timezone}
-                    className={`flex p-0.5 rounded-2xl border transition-all ${
-                      theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'
+                    className={`flex p-0.5 rounded-2xl transition-all ${
+                      theme === 'light' ? 'bg-stone-100' : 'bg-stone-900'
                     }`}
                   >
                     <button
@@ -654,7 +654,7 @@ export default function App() {
                   </div>
                 ))}
 
-                <div className={`flex p-0.5 rounded-2xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+                <div className={`flex p-0.5 rounded-2xl transition-all ${theme === 'light' ? 'bg-stone-100' : 'bg-stone-900'}`}>
                   <button
                     onClick={() => {
                       setRecentSearches([]);
@@ -681,7 +681,7 @@ export default function App() {
             key={`source-${sourceZone}`}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className={`flex-1 p-8 rounded-[2rem] shadow-sm border flex flex-col items-center text-center group hover:shadow-md transition-all duration-300 ease-out overflow-hidden ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}
+            className={`flex-1 p-8 rounded-[2rem] shadow-sm flex flex-col items-center text-center group hover:shadow-md transition-all duration-300 ease-out overflow-hidden ${theme === 'light' ? 'bg-white' : 'bg-stone-900'}`}
           >
             <div className={`flex items-center gap-2 mb-6 font-medium text-xs uppercase tracking-wider whitespace-nowrap ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>
               <MapPin className="w-3 h-3" />
@@ -699,7 +699,7 @@ export default function App() {
             <div className={`text-5xl lg:text-7xl font-light tracking-tighter mb-4 tabular-nums whitespace-nowrap ${theme === 'light' ? 'text-stone-800' : 'text-stone-100'}`}>
               {localTime.toFormat(timeFormat === '12h' ? 'hh:mm:ss a' : 'HH:mm:ss')}
             </div>
-            <div className={`mt-8 pt-6 border-t w-full text-sm font-medium truncate ${theme === 'light' ? 'border-stone-50 text-stone-500' : 'border-stone-800 text-stone-400'}`}>
+            <div className={`mt-8 pt-6 w-full text-sm font-medium truncate ${theme === 'light' ? 'text-stone-500' : 'text-stone-400'}`}>
               {sourceZone.replace(/_/g, ' ')}
             </div>
           </motion.div>
@@ -709,14 +709,14 @@ export default function App() {
             key={`target-${targetZone || 'none'}`}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className={`flex-1 p-8 rounded-[2rem] shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden group transition-all duration-500 ease-out ${targetZone ? 'bg-stone-900 text-white' : (theme === 'light' ? 'bg-stone-100/50 border-stone-200 text-stone-400' : 'bg-stone-900 border-stone-800 text-stone-600')} border-2 border-dashed`}
+            className={`flex-1 p-8 rounded-[2rem] shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden group transition-all duration-500 ease-out ${targetZone ? 'bg-stone-900 text-white' : (theme === 'light' ? 'bg-stone-100/50 text-stone-400' : 'bg-stone-900 text-stone-600')}`}
             onMouseEnter={() => setIsHoveringTarget(true)}
             onMouseLeave={() => setIsHoveringTarget(false)}
           >
             {targetZone && targetTime ? (
               <>
                 {/* Tooltip */}
-                <div className={`absolute top-6 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-xl border border-white/20 px-6 py-3 rounded-2xl text-[11px] font-medium text-white z-50 transition-all duration-500 shadow-2xl flex flex-col items-center gap-1 min-w-max ${isHoveringTarget ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95 pointer-events-none'}`}>
+                <div className={`absolute top-6 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-xl px-6 py-3 rounded-2xl text-[11px] font-medium text-white z-50 transition-all duration-500 shadow-2xl flex flex-col items-center gap-1 min-w-max ${isHoveringTarget ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95 pointer-events-none'}`}>
                   <span className="opacity-60 uppercase tracking-widest text-[9px]">Timezone Details</span>
                   <span className="text-white font-semibold">{targetZone.replace(/_/g, ' ')}</span>
                   <span className="text-stone-400">{targetTime.offsetNameLong} • {targetOffset}</span>
@@ -730,7 +730,7 @@ export default function App() {
                 >
                   {targetTime.toFormat(timeFormat === '12h' ? 'hh:mm:ss a' : 'HH:mm:ss')}
                 </div>
-                <div className="mt-8 pt-6 border-t border-stone-800 w-full text-stone-400 text-sm font-medium relative z-10 truncate">
+                <div className="mt-8 pt-6 w-full text-stone-400 text-sm font-medium relative z-10 truncate">
                   {targetZone.replace(/_/g, ' ')}
                 </div>
               </>
@@ -751,7 +751,7 @@ export default function App() {
         <div className="mt-12 flex flex-col items-center gap-8 w-full max-w-4xl">
           {/* Manual Time Control Card - Standalone */}
           <div className="w-fit">
-            <div className={`p-5 rounded-3xl shadow-xl border transition-all ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
+            <div className={`p-5 rounded-3xl shadow-xl transition-all ${theme === 'light' ? 'bg-white' : 'bg-stone-900'}`}>
               <div className="flex flex-col items-center">
                 <div className="w-fit space-y-4">
                   <div className="flex items-center justify-center relative mb-2">
@@ -775,7 +775,7 @@ export default function App() {
 
                     {timeFormat === '12h' && (
                       <div className="flex items-center justify-center h-8 px-2">
-                        <div className={`flex p-1 rounded-xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+                        <div className={`flex p-1 rounded-xl transition-all ${theme === 'light' ? 'bg-stone-100' : 'bg-stone-900'}`}>
                           {['AM', 'PM'].map((period) => {
                             const isActive = (period === 'AM' && localTime.hour < 12) || (period === 'PM' && localTime.hour >= 12);
                             return (
@@ -824,10 +824,10 @@ export default function App() {
                             handleTimeSelect(val, localTime.minute, 'source');
                           }
                         }}
-                        className={`w-full px-4 py-3 rounded-2xl border font-mono text-base transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
+                        className={`w-full px-4 py-3 rounded-2xl font-mono text-base transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
                           theme === 'light' 
-                            ? 'bg-stone-50 border-stone-100 text-stone-800' 
-                            : 'bg-stone-800/50 border-stone-700 text-stone-100'
+                            ? 'bg-stone-50 text-stone-800' 
+                            : 'bg-stone-800/50 text-stone-100'
                         }`}
                       />
                     </div>
@@ -851,10 +851,10 @@ export default function App() {
                           if (val > 59) val = 59;
                           handleTimeSelect(localTime.hour, val, 'source');
                         }}
-                        className={`w-full px-4 py-3 rounded-2xl border font-mono text-base transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
+                        className={`w-full px-4 py-3 rounded-2xl font-mono text-base transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
                           theme === 'light' 
-                            ? 'bg-stone-50 border-stone-100 text-stone-800' 
-                            : 'bg-stone-800/50 border-stone-700 text-stone-100'
+                            ? 'bg-stone-50 text-stone-800' 
+                            : 'bg-stone-800/50 text-stone-100'
                         }`}
                       />
                     </div>
@@ -871,13 +871,6 @@ export default function App() {
 
       </div>
 
-      {/* Footer */}
-      <footer className={`w-full py-12 text-center border-t transition-colors ${theme === 'light' ? 'border-stone-100 text-stone-400' : 'border-stone-900 text-stone-600'}`}>
-        <p className="text-xs font-medium tracking-[0.15em] uppercase">
-          Made with love by <span className={theme === 'light' ? 'text-stone-600' : 'text-stone-400'}>Elijah Edemumoh</span>
-        </p>
-      </footer>
-
       {/* Toast Notification */}
       <AnimatePresence>
         {syncMessage && (
@@ -887,12 +880,12 @@ export default function App() {
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
             className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100]"
           >
-            <div className={`px-6 py-3 rounded-2xl shadow-2xl border flex items-center gap-3 backdrop-blur-xl ${
+            <div className={`px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-xl ${
               syncStatus === 'success' 
-                ? 'bg-emerald-500/90 border-emerald-400 text-white' 
+                ? 'bg-emerald-500/90 text-white' 
                 : syncStatus === 'error'
-                  ? 'bg-red-500/90 border-red-400 text-white'
-                  : theme === 'light' ? 'bg-white/90 border-stone-200 text-stone-800' : 'bg-stone-900/90 border-stone-800 text-stone-100'
+                  ? 'bg-red-500/90 text-white'
+                  : theme === 'light' ? 'bg-white/90 text-stone-800' : 'bg-stone-900/90 text-stone-100'
             }`}>
               {syncStatus === 'success' && <Clock className="w-4 h-4" />}
               {syncStatus === 'error' && <X className="w-4 h-4" />}
