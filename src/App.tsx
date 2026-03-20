@@ -74,6 +74,8 @@ export default function App() {
   const [isLive, setIsLive] = useState(true);
   const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('12h');
   const [recentSearches, setRecentSearches] = useState<SearchResult[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearchingResults, setIsSearchingResults] = useState(false);
 
   // Load recent searches on mount
   useEffect(() => {
@@ -228,81 +230,83 @@ export default function App() {
     }
   }, []);
 
-  const searchResults = useMemo(() => {
-    if (!searchQuery || searchQuery.length < 2) return [];
-    const query = searchQuery.toLowerCase();
-    const results: SearchResult[] = [];
+  useEffect(() => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setSearchResults([]);
+      setIsSearchingResults(false);
+      return;
+    }
 
-    // 1. Timezone matches
-    const tzMatches = allTimezones.filter(tz => 
-      tz.toLowerCase().includes(query)
-    ).sort((a, b) => {
-      const aLower = a.toLowerCase();
-      const bLower = b.toLowerCase();
-      if (aLower === query) return -1;
-      if (bLower === query) return 1;
-      if (aLower.startsWith(query) && !bLower.startsWith(query)) return -1;
-      if (!aLower.startsWith(query) && bLower.startsWith(query)) return 1;
-      return a.localeCompare(b);
-    }).slice(0, 5);
+    setIsSearchingResults(true);
+    const timer = setTimeout(() => {
+      const query = searchQuery.toLowerCase();
+      const results: SearchResult[] = [];
 
-    tzMatches.forEach(tz => {
-      results.push({
-        type: 'timezone',
-        name: tz.replace(/_/g, ' '),
-        timezone: tz
-      });
-    });
+      // 1. Timezone matches
+      const tzMatches = allTimezones.filter(tz => 
+        tz.toLowerCase().includes(query)
+      ).sort((a, b) => {
+        const aLower = a.toLowerCase();
+        const bLower = b.toLowerCase();
+        if (aLower === query) return -1;
+        if (bLower === query) return 1;
+        if (aLower.startsWith(query) && !bLower.startsWith(query)) return -1;
+        if (!aLower.startsWith(query) && bLower.startsWith(query)) return 1;
+        return a.localeCompare(b);
+      }).slice(0, 5);
 
-    // 2. City and Country matches from cityMapping
-    // We'll search in city, country, and province
-    const cityMatches = cityMapping.filter(city => {
-      const cityName = city.city.toLowerCase();
-      const countryName = city.country.toLowerCase();
-      const provinceName = (city as any).province?.toLowerCase() || '';
-      
-      return cityName.includes(query) || 
-             countryName.includes(query) || 
-             provinceName.includes(query);
-    }).sort((a, b) => {
-      const aCity = a.city.toLowerCase();
-      const bCity = b.city.toLowerCase();
-      const aCountry = a.country.toLowerCase();
-      const bCountry = b.country.toLowerCase();
-
-      // Prioritize exact city match
-      if (aCity === query && bCity !== query) return -1;
-      if (bCity === query && aCity !== query) return 1;
-
-      // Prioritize city starts with
-      if (aCity.startsWith(query) && !bCity.startsWith(query)) return -1;
-      if (!aCity.startsWith(query) && bCity.startsWith(query)) return 1;
-
-      // Prioritize exact country match
-      if (aCountry === query && bCountry !== query) return -1;
-      if (bCountry === query && aCountry !== query) return 1;
-
-      return a.city.localeCompare(b.city);
-    }).slice(0, 15); // Show more results for better coverage
-
-    cityMatches.forEach(city => {
-      // Avoid duplicate timezones if they are already in results as timezone type
-      // but only if the name matches exactly to avoid confusion
-      const displayName = `${city.city}${city.country ? `, ${city.country}` : ''}`;
-      
-      if (!results.some(r => r.name === displayName)) {
+      tzMatches.forEach(tz => {
         results.push({
-          type: 'city',
-          name: displayName,
-          timezone: city.timezone,
-          country: city.country,
-          lat: Number(city.lat),
-          lng: Number(city.lng)
+          type: 'timezone',
+          name: tz.replace(/_/g, ' '),
+          timezone: tz
         });
-      }
-    });
+      });
 
-    return results;
+      // 2. City and Country matches from cityMapping
+      const cityMatches = cityMapping.filter(city => {
+        const cityName = city.city.toLowerCase();
+        const countryName = city.country.toLowerCase();
+        const provinceName = (city as any).province?.toLowerCase() || '';
+        
+        return cityName.includes(query) || 
+               countryName.includes(query) || 
+               provinceName.includes(query);
+      }).sort((a, b) => {
+        const aCity = a.city.toLowerCase();
+        const bCity = b.city.toLowerCase();
+        const aCountry = a.country.toLowerCase();
+        const bCountry = b.country.toLowerCase();
+
+        if (aCity === query && bCity !== query) return -1;
+        if (bCity === query && aCity !== query) return 1;
+        if (aCity.startsWith(query) && !bCity.startsWith(query)) return -1;
+        if (!aCity.startsWith(query) && bCity.startsWith(query)) return 1;
+        if (aCountry === query && bCountry !== query) return -1;
+        if (bCountry === query && aCountry !== query) return 1;
+
+        return a.city.localeCompare(b.city);
+      }).slice(0, 15);
+
+      cityMatches.forEach(city => {
+        const displayName = `${city.city}${city.country ? `, ${city.country}` : ''}`;
+        if (!results.some(r => r.name === displayName)) {
+          results.push({
+            type: 'city',
+            name: displayName,
+            timezone: city.timezone,
+            country: city.country,
+            lat: Number(city.lat),
+            lng: Number(city.lng)
+          });
+        }
+      });
+
+      setSearchResults(results);
+      setIsSearchingResults(false);
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timer);
   }, [searchQuery, allTimezones]);
 
   // Update time every second
@@ -558,7 +562,16 @@ export default function App() {
                     exit={{ opacity: 0, y: 10 }}
                     className={`absolute top-full left-0 right-0 mt-3 border rounded-3xl shadow-2xl overflow-hidden z-50 ${theme === 'light' ? 'bg-white border-stone-200' : 'bg-stone-900 border-stone-800'}`}
                   >
-                    {searchResults.length > 0 ? (
+                    {isSearchingResults ? (
+                      <div className="p-4 space-y-3">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="flex flex-col gap-2 animate-pulse">
+                            <div className={`h-4 w-3/4 rounded-full ${theme === 'light' ? 'bg-stone-100' : 'bg-stone-800'}`} />
+                            <div className={`h-3 w-1/2 rounded-full ${theme === 'light' ? 'bg-stone-50' : 'bg-stone-800/50'}`} />
+                          </div>
+                        ))}
+                      </div>
+                    ) : searchResults.length > 0 ? (
                       searchResults.map((result, idx) => (
                         <button
                           key={`${result.timezone}-${idx}`}
@@ -696,7 +709,7 @@ export default function App() {
             key={`target-${targetZone || 'none'}`}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className={`flex-1 p-8 rounded-[2rem] shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden group transition-all duration-500 ease-out ${targetZone ? 'bg-stone-900 text-white' : 'bg-stone-100/50 border-2 border-dashed border-stone-200 text-stone-400'}`}
+            className={`flex-1 p-8 rounded-[2rem] shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden group transition-all duration-500 ease-out ${targetZone ? 'bg-stone-900 text-white' : (theme === 'light' ? 'bg-stone-100/50 border-stone-200 text-stone-400' : 'bg-stone-900 border-stone-800 text-stone-600')} border-2 border-dashed`}
             onMouseEnter={() => setIsHoveringTarget(true)}
             onMouseLeave={() => setIsHoveringTarget(false)}
           >
@@ -723,10 +736,10 @@ export default function App() {
               </>
             ) : (
               <div className="flex flex-col items-center gap-4 py-12">
-                <div className="w-16 h-16 rounded-full bg-stone-200/50 flex items-center justify-center mb-2">
-                  <Clock className="w-8 h-8 text-stone-300" />
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-2 ${theme === 'light' ? 'bg-stone-200/50' : 'bg-stone-800/50'}`}>
+                  <Clock className={`w-8 h-8 ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`} />
                 </div>
-                <p className="text-xl font-light italic text-stone-400">Select time to compare</p>
+                <p className={`text-xl font-light italic ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>Select time to compare</p>
               </div>
             )}
           </motion.div>
@@ -857,6 +870,13 @@ export default function App() {
         </div>
 
       </div>
+
+      {/* Footer */}
+      <footer className={`w-full py-12 text-center border-t transition-colors ${theme === 'light' ? 'border-stone-100 text-stone-400' : 'border-stone-900 text-stone-600'}`}>
+        <p className="text-xs font-medium tracking-[0.15em] uppercase">
+          Made with love by <span className={theme === 'light' ? 'text-stone-600' : 'text-stone-400'}>Elijah Edemumoh</span>
+        </p>
+      </footer>
 
       {/* Toast Notification */}
       <AnimatePresence>
