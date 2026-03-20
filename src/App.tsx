@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, ChangeEvent, useCallback, useRef } from 'react';
 import { DateTime } from 'luxon';
-import { Search, MapPin, Clock, ArrowRightLeft, Sun, Moon, Share } from 'lucide-react';
+import { Search, MapPin, Clock, ArrowRightLeft, Sun, Moon, Share, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cityMapping } from 'city-timezones';
 
@@ -11,6 +11,53 @@ interface SearchResult {
   country?: string;
   lat?: number;
   lng?: number;
+}
+
+function TimezoneInfoCard({ zone, theme, timeFormat }: { zone: string; theme: 'light' | 'dark'; timeFormat: '12h' | '24h' }) {
+  const now = DateTime.now().setZone(zone);
+  const offset = now.toFormat('ZZZZ');
+  const isDst = now.isInDST;
+  const timeStr = now.toFormat(timeFormat === '12h' ? 'hh:mm a' : 'HH:mm');
+  
+  const commonCities = useMemo(() => {
+    return cityMapping
+      .filter(c => c.timezone === zone)
+      .slice(0, 8)
+      .map(c => c.city)
+      .join(', ');
+  }, [zone]);
+
+  return (
+    <div className={`p-6 rounded-[2rem] border transition-all hover:shadow-md ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className={`text-[10px] font-bold uppercase tracking-[0.2em] ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>
+          {zone.split('/').pop()?.replace(/_/g, ' ')}
+        </h3>
+        <div className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider ${isDst ? 'bg-emerald-500/10 text-emerald-500' : 'bg-stone-500/10 text-stone-500'}`}>
+          {isDst ? 'DST Active' : 'Standard Time'}
+        </div>
+      </div>
+      
+      <div className="space-y-4">
+        <div className="flex justify-between items-center group">
+          <span className={`text-xs ${theme === 'light' ? 'text-stone-500' : 'text-stone-400'}`}>Current Time</span>
+          <span className={`text-xs font-mono font-medium ${theme === 'light' ? 'text-stone-800' : 'text-stone-100'}`}>{timeStr}</span>
+        </div>
+
+        <div className="flex justify-between items-center group">
+          <span className={`text-xs ${theme === 'light' ? 'text-stone-500' : 'text-stone-400'}`}>UTC Offset</span>
+          <span className={`text-xs font-mono font-medium ${theme === 'light' ? 'text-stone-800' : 'text-stone-100'}`}>{offset}</span>
+        </div>
+        
+        <div className="pt-4 border-t border-stone-50 dark:border-stone-800">
+          <span className={`text-[9px] font-bold uppercase tracking-widest block mb-2 ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>Major Cities</span>
+          <p className={`text-xs leading-relaxed ${theme === 'light' ? 'text-stone-600' : 'text-stone-400'}`}>
+            {commonCities || 'No major cities listed'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
@@ -49,6 +96,14 @@ export default function App() {
     });
   };
 
+  const removeRecent = (timezone: string) => {
+    setRecentSearches(prev => {
+      const updated = prev.filter(r => r.timezone !== timezone);
+      localStorage.setItem('recentTimezones', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const syncLocation = useCallback(() => {
     setSyncStatus('syncing');
     setSyncMessage('Detecting your location...');
@@ -66,6 +121,7 @@ export default function App() {
           setIsSynced(true);
           setTimeout(() => {
             setSyncStatus('idle');
+            setSyncMessage('');
             setIsSynced(false);
           }, 4000);
           return;
@@ -79,7 +135,10 @@ export default function App() {
     if (!("geolocation" in navigator)) {
       setSyncStatus('error');
       setSyncMessage('Location sync failed');
-      setTimeout(() => setSyncStatus('idle'), 3000);
+      setTimeout(() => {
+        setSyncStatus('idle');
+        setSyncMessage('');
+      }, 3000);
       return;
     }
 
@@ -112,23 +171,30 @@ export default function App() {
             setSyncStatus('success');
             setSyncMessage(`Synced to ${closestCity.timezone.split('/').pop()?.replace(/_/g, ' ')}`);
             setIsSynced(true);
-            setTimeout(() => {
-              setSyncStatus('idle');
-              setIsSynced(false);
-            }, 4000);
+          setTimeout(() => {
+            setSyncStatus('idle');
+            setSyncMessage('');
+            setIsSynced(false);
+          }, 4000);
             return;
           }
         }
         
         setSyncStatus('error');
         setSyncMessage('Location sync failed');
-        setTimeout(() => setSyncStatus('idle'), 3000);
+        setTimeout(() => {
+          setSyncStatus('idle');
+          setSyncMessage('');
+        }, 3000);
       },
       (error) => {
         console.warn("Geolocation error:", error.message);
         setSyncStatus('error');
         setSyncMessage('Location sync failed');
-        setTimeout(() => setSyncStatus('idle'), 3000);
+        setTimeout(() => {
+          setSyncStatus('idle');
+          setSyncMessage('');
+        }, 3000);
       },
       { timeout: 10000, enableHighAccuracy: false }
     );
@@ -296,47 +362,22 @@ export default function App() {
     navigator.clipboard.writeText(url.toString()).then(() => {
       setSyncStatus('success');
       setSyncMessage('Share link copied to clipboard!');
-      setTimeout(() => setSyncStatus('idle'), 3000);
+      setTimeout(() => {
+        setSyncStatus('idle');
+        setSyncMessage('');
+      }, 3000);
     }).catch(err => {
       console.error('Failed to copy: ', err);
       setSyncStatus('error');
       setSyncMessage('Failed to copy link');
-      setTimeout(() => setSyncStatus('idle'), 3000);
+      setTimeout(() => {
+        setSyncStatus('idle');
+        setSyncMessage('');
+      }, 3000);
     });
   };
 
-  const [splitRatio, setSplitRatio] = useState(50);
-  const [isDragging, setIsDragging] = useState(false);
   const [isHoveringTarget, setIsHoveringTarget] = useState(false);
-
-  // Handle dragging for resizing
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-      const container = document.getElementById('comparison-container');
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const newRatio = Math.max(25, Math.min(75, (x / rect.width) * 100));
-      setSplitRatio(newRatio);
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      document.body.style.cursor = 'default';
-    };
-
-    if (isDragging) {
-      document.body.style.cursor = 'col-resize';
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging]);
 
   const targetTime = targetZone ? localTime.setZone(targetZone) : null;
 
@@ -389,63 +430,56 @@ export default function App() {
 
   return (
     <div className={`min-h-screen transition-colors duration-500 ${theme === 'light' ? 'bg-stone-50 text-stone-900' : 'bg-stone-950 text-stone-50'} font-sans selection:bg-stone-200`}>
-      {/* Sync Status Toast */}
-      <AnimatePresence>
-        {syncStatus !== 'idle' && (
-          <motion.div
-            initial={{ opacity: 0, y: -50, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -50, x: '-50%' }}
-            className="fixed top-8 left-1/2 z-[100] pointer-events-none"
-          >
-            <div className={`px-6 py-3 rounded-full shadow-2xl border flex items-center gap-3 backdrop-blur-md ${
-              syncStatus === 'syncing' ? 'bg-white/90 border-stone-200 text-stone-600' :
-              syncStatus === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' :
-              'bg-rose-500/90 border-rose-400 text-white'
-            }`}>
-              {syncStatus === 'syncing' && (
-                <motion.div 
-                  animate={{ rotate: 360 }} 
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                >
-                  <Clock className="w-4 h-4" />
-                </motion.div>
-              )}
-              {syncStatus === 'success' && <MapPin className="w-4 h-4" />}
-              {syncStatus === 'error' && <Search className="w-4 h-4" />}
-              <span className="text-sm font-medium tracking-tight">
-                {syncMessage}
-              </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <div className="max-w-5xl mx-auto px-6 py-12 md:py-24 flex flex-col items-center">
         
         {/* Header */}
         <header className="mb-16 text-center relative w-full">
-          <div className="absolute right-0 top-0 flex items-center gap-3">
-            <button
-              onClick={() => setTimeFormat(prev => prev === '12h' ? '24h' : '12h')}
-              className={`px-4 py-2.5 rounded-2xl border text-[10px] font-bold uppercase tracking-widest transition-all ${theme === 'light' ? 'bg-[#1c1917] border-stone-800 text-white hover:bg-stone-800' : 'bg-[#1c1917] border-stone-800 text-stone-500 hover:text-stone-300'}`}
-            >
-              {timeFormat}
-            </button>
-            <button
-              onClick={handleShare}
-              className={`p-3 rounded-2xl border transition-all ${theme === 'light' ? 'bg-[#1c1917] border-stone-800 text-white hover:bg-stone-800' : 'bg-[#1c1917] border-stone-800 text-stone-500 hover:text-stone-300'}`}
-              title="Share comparison"
-            >
-              <Share className="w-5 h-5" />
-            </button>
-            <button
-              onClick={toggleTheme}
-              className={`p-3 rounded-2xl border transition-all ${theme === 'light' ? 'bg-[#1c1917] border-stone-800 text-white hover:bg-stone-800' : 'bg-[#1c1917] border-stone-800 text-stone-500 hover:text-stone-300'}`}
-            >
-              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-            </button>
-          </div>
+            <div className="absolute right-0 top-0 flex items-center gap-3">
+              {/* Time Format Toggle */}
+              <div className={`flex p-1 rounded-2xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+                {(['12h', '24h'] as const).map((format) => (
+                  <button
+                    key={format}
+                    onClick={() => setTimeFormat(format)}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
+                      timeFormat === format
+                        ? theme === 'light' ? 'bg-white text-stone-900 shadow-sm' : 'bg-stone-800 text-white shadow-sm'
+                        : theme === 'light' ? 'text-stone-400 hover:text-stone-600' : 'text-stone-600 hover:text-stone-400'
+                    }`}
+                  >
+                    {format}
+                  </button>
+                ))}
+              </div>
+
+              {/* Share Button */}
+              <div className={`flex p-1 rounded-2xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+                <button
+                  onClick={handleShare}
+                  className={`px-3 py-1.5 rounded-xl transition-all ${theme === 'light' ? 'text-stone-400 hover:bg-white hover:text-stone-900 hover:shadow-sm' : 'text-stone-600 hover:bg-stone-800 hover:text-white hover:shadow-sm'}`}
+                  title="Share comparison"
+                >
+                  <Share className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Theme Toggle */}
+              <div className={`flex p-1 rounded-2xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+                {(['light', 'dark'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTheme(t)}
+                    className={`px-3 py-1.5 rounded-xl transition-all ${
+                      theme === t
+                        ? theme === 'light' ? 'bg-white text-stone-900 shadow-sm' : 'bg-stone-800 text-white shadow-sm'
+                        : theme === 'light' ? 'text-stone-400 hover:text-stone-600' : 'text-stone-600 hover:text-stone-400'
+                    }`}
+                  >
+                    {t === 'light' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                  </button>
+                ))}
+              </div>
+            </div>
           <h1 className={`text-sm font-medium tracking-[0.2em] mb-2 ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>Timesync</h1>
           <p className={`text-2xl font-light italic ${theme === 'light' ? 'text-stone-600' : 'text-stone-400'}`}>Compare moments across the globe.</p>
         </header>
@@ -563,59 +597,61 @@ export default function App() {
             </div>
           </div>
 
-          {/* Conversion Summary Display */}
-          <AnimatePresence>
-            {conversionSummary && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="flex justify-center"
-              >
-                <div className={`px-8 py-4 rounded-2xl border shadow-lg flex items-center gap-4 ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
-                  <Clock className="w-5 h-5 text-emerald-500" />
-                  <span className={`text-lg font-light tracking-tight ${theme === 'light' ? 'text-stone-800' : 'text-stone-100'}`}>
-                    {conversionSummary}
-                  </span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Recent Searches */}
-
           <AnimatePresence>
             {recentSearches.length > 0 && !isSearching && (
               <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-wrap justify-center gap-2 mt-4"
+                className="flex flex-wrap justify-center items-center gap-2 mt-6"
               >
-                <span className={`text-[10px] font-bold tracking-widest self-center mr-2 ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>Recent:</span>
-                <button
-                  onClick={() => {
-                    setRecentSearches([]);
-                    localStorage.removeItem('recentTimezones');
-                  }}
-                  className={`px-2 py-1 rounded-md text-[8px] font-bold uppercase tracking-wider transition-all ${theme === 'light' ? 'bg-[#1c1917] text-white hover:bg-stone-800' : 'bg-[#1c1917] text-stone-100 hover:bg-stone-800'}`}
-                >
-                  Clear
-                </button>
+                <span className={`text-[11px] font-medium tracking-tight ${theme === 'light' ? 'text-stone-400' : 'text-stone-500'}`}>Recent:</span>
+                
                 {recentSearches.map((recent) => (
-                  <button
+                  <div
                     key={recent.timezone}
-                    onClick={() => setTargetZone(recent.timezone)}
-                    className={`px-3 py-1.5 rounded-full text-[10px] font-medium transition-all border ${
-                      targetZone === recent.timezone 
-                        ? 'bg-emerald-500 border-emerald-400 text-white shadow-sm' 
-                        : theme === 'light' 
-                          ? 'bg-white border-stone-100 text-stone-500 hover:border-stone-200 hover:text-stone-700' 
-                          : 'bg-stone-900 border-stone-800 text-stone-400 hover:border-stone-700 hover:text-stone-200'
+                    className={`flex p-0.5 rounded-2xl border transition-all ${
+                      theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'
                     }`}
                   >
-                    {recent.name.split(',')[0]}
-                  </button>
+                    <button
+                      onClick={() => setTargetZone(recent.timezone)}
+                      className={`pl-3 pr-1 py-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
+                        targetZone === recent.timezone
+                          ? theme === 'light' ? 'bg-white text-stone-900 shadow-sm' : 'bg-stone-800 text-white shadow-sm'
+                          : theme === 'light' ? 'text-stone-400 hover:text-stone-600' : 'text-stone-600 hover:text-stone-400'
+                      }`}
+                    >
+                      {recent.name.split(',')[0]}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeRecent(recent.timezone);
+                      }}
+                      className={`pr-2 pl-1 py-1 rounded-xl transition-colors ${
+                        targetZone === recent.timezone 
+                          ? theme === 'light' ? 'text-stone-400 hover:text-stone-900' : 'text-stone-500 hover:text-white'
+                          : theme === 'light' ? 'text-stone-300 hover:text-red-400' : 'text-stone-600 hover:text-red-400'
+                      }`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                 ))}
+
+                <div className={`flex p-0.5 rounded-2xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+                  <button
+                    onClick={() => {
+                      setRecentSearches([]);
+                      localStorage.removeItem('recentTimezones');
+                    }}
+                    className={`px-3 py-1 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${theme === 'light' ? 'text-stone-400 hover:bg-white hover:text-stone-900 hover:shadow-sm' : 'text-stone-600 hover:bg-stone-800 hover:text-white hover:shadow-sm'}`}
+                  >
+                    Clear all
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -632,8 +668,7 @@ export default function App() {
             key={`source-${sourceZone}`}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            style={{ flex: `0 0 ${splitRatio}%` }}
-            className={`p-8 rounded-[2rem] shadow-sm border flex flex-col items-center text-center group hover:shadow-md transition-all duration-300 ease-out overflow-hidden ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}
+            className={`flex-1 p-8 rounded-[2rem] shadow-sm border flex flex-col items-center text-center group hover:shadow-md transition-all duration-300 ease-out overflow-hidden ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}
           >
             <div className={`flex items-center gap-2 mb-6 font-medium text-xs uppercase tracking-wider whitespace-nowrap ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>
               <MapPin className="w-3 h-3" />
@@ -656,22 +691,12 @@ export default function App() {
             </div>
           </motion.div>
 
-          {/* Resize Handle (Desktop Only) */}
-          <div 
-            className="hidden md:flex absolute top-0 bottom-0 z-20 cursor-col-resize items-center justify-center w-8 -mx-4 group"
-            style={{ left: `${splitRatio}%` }}
-            onMouseDown={() => setIsDragging(true)}
-          >
-            <div className={`w-1 h-12 rounded-full transition-all duration-200 ${isDragging ? 'bg-stone-400 h-24' : 'bg-stone-200 group-hover:bg-stone-300 group-hover:h-16'}`} />
-          </div>
-
           {/* Target Card */}
           <motion.div 
             key={`target-${targetZone || 'none'}`}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            style={{ flex: `0 0 ${100 - splitRatio}%` }}
-            className={`p-8 rounded-[2rem] shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden group transition-all duration-500 ease-out ${targetZone ? 'bg-stone-900 text-white' : 'bg-stone-100/50 border-2 border-dashed border-stone-200 text-stone-400'}`}
+            className={`flex-1 p-8 rounded-[2rem] shadow-xl flex flex-col items-center justify-center text-center relative overflow-hidden group transition-all duration-500 ease-out ${targetZone ? 'bg-stone-900 text-white' : 'bg-stone-100/50 border-2 border-dashed border-stone-200 text-stone-400'}`}
             onMouseEnter={() => setIsHoveringTarget(true)}
             onMouseLeave={() => setIsHoveringTarget(false)}
           >
@@ -708,127 +733,117 @@ export default function App() {
 
         </div>
 
+
         {/* Time Difference Indicator & Manual Controls */}
         <div className="mt-12 flex flex-col items-center gap-8 w-full max-w-4xl">
-          <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-sm border transition-all ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
-            <ArrowRightLeft className={`w-4 h-4 ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`} />
-            <span className={`font-medium text-sm ${theme === 'light' ? 'text-stone-600' : 'text-stone-400'}`}>
-              {diffText}
-            </span>
-          </div>
-
           {/* Manual Time Control Card - Standalone */}
           <div className="w-fit">
             <div className={`p-5 rounded-3xl shadow-xl border transition-all ${theme === 'light' ? 'bg-white border-stone-100' : 'bg-stone-900 border-stone-800'}`}>
               <div className="flex flex-col items-center">
                 <div className="w-fit space-y-4">
-                  <div className="flex items-center justify-between gap-6">
-                    <div className="flex items-center gap-3">
-                      <span className={`text-[9px] font-bold uppercase tracking-[0.2em] ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>Manual Adjustment</span>
-                      {!isLive && (
-                        <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 text-[9px] font-bold uppercase rounded-md">Manual Mode</span>
-                      )}
-                      {isLive && (
-                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 text-[9px] font-bold uppercase rounded-md">Live Sync</span>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-center relative mb-2">
+                    <span className={`text-[9px] font-bold uppercase tracking-[0.3em] ${theme === 'light' ? 'text-stone-400' : 'text-stone-600'}`}>Manual Adjustment</span>
                     {!isLive && (
                       <button 
                         onClick={returnToLive}
-                        className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500/20 transition-all text-[10px] font-bold uppercase tracking-widest"
+                        className="absolute right-0 flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-500 rounded-lg hover:bg-emerald-500/20 transition-all text-[8px] font-bold uppercase tracking-widest"
                       >
-                        <Clock className="w-3 h-3" />
-                        Return to Live
+                        <Clock className="w-2.5 h-2.5" />
+                        Live
                       </button>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 max-w-md">
-                    {/* Hour Input */}
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <label className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-stone-500' : 'text-stone-400'}`}>Hour</label>
-                          <span className={`text-[9px] ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>({timeFormat === '12h' ? '1-12' : '0-23'})</span>
-                        </div>
-                        {timeFormat === '12h' && (
-                          <div className="flex bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5">
-                            {['AM', 'PM'].map((period) => (
+                  <div className={`grid ${timeFormat === '12h' ? 'grid-cols-[1fr_auto_1fr]' : 'grid-cols-2'} gap-x-4 gap-y-3 max-w-md w-full`}>
+                    {/* Header Row - Labels & Toggle */}
+                    <div className="flex items-center h-8">
+                      <label className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-stone-500' : 'text-stone-400'}`}>Hour</label>
+                    </div>
+
+                    {timeFormat === '12h' && (
+                      <div className="flex items-center justify-center h-8 px-2">
+                        <div className={`flex p-1 rounded-xl border transition-all ${theme === 'light' ? 'bg-stone-100 border-stone-200' : 'bg-stone-900 border-stone-800'}`}>
+                          {['AM', 'PM'].map((period) => {
+                            const isActive = (period === 'AM' && localTime.hour < 12) || (period === 'PM' && localTime.hour >= 12);
+                            return (
                               <button
                                 key={period}
                                 onClick={() => handleAmPmChange('source', period)}
-                                className={`px-1.5 py-0.5 rounded-md text-[8px] font-bold transition-all ${
-                                  (period === 'AM' && localTime.hour < 12) || (period === 'PM' && localTime.hour >= 12)
-                                    ? 'bg-[#4f4f4f] text-white shadow-sm'
-                                    : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-200'
+                                className={`px-2.5 py-1 rounded-lg text-[9px] font-bold transition-all ${
+                                  isActive
+                                    ? theme === 'light' ? 'bg-white text-stone-900 shadow-sm' : 'bg-stone-800 text-white shadow-sm'
+                                    : theme === 'light' ? 'text-stone-400 hover:text-stone-600' : 'text-stone-600 hover:text-stone-400'
                                 }`}
                               >
                                 {period}
                               </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="relative">
-                        <input 
-                          type="number" 
-                          min={timeFormat === '12h' ? 1 : 0}
-                          max={timeFormat === '12h' ? 12 : 23}
-                          value={timeFormat === '12h' ? (localTime.hour % 12 || 12) : localTime.hour}
-                          onChange={(e) => {
-                            let val = parseInt(e.target.value);
-                            if (isNaN(val)) return;
-                            
-                            if (timeFormat === '12h') {
-                              if (val < 1) val = 1;
-                              if (val > 12) val = 12;
-                              const isPm = localTime.hour >= 12;
-                              let newHour = val % 12;
-                              if (isPm) newHour += 12;
-                              handleTimeSelect(newHour, localTime.minute, 'source');
-                            } else {
-                              if (val < 0) val = 0;
-                              if (val > 23) val = 23;
-                              handleTimeSelect(val, localTime.minute, 'source');
-                            }
-                          }}
-                          className={`w-full px-3 py-2 rounded-xl border font-mono text-sm transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
-                            theme === 'light' 
-                              ? 'bg-stone-50 border-stone-100 text-stone-800' 
-                              : 'bg-stone-800/50 border-stone-700 text-stone-100'
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Minute Input */}
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <label className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-stone-500' : 'text-stone-400'}`}>Minute</label>
-                          <span className={`text-[9px] ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>(0-59)</span>
+                            );
+                          })}
                         </div>
                       </div>
-                      <div className="relative">
-                        <input 
-                          type="number" 
-                          min="0" 
-                          max="59" 
-                          value={localTime.minute}
-                          onChange={(e) => {
-                            let val = parseInt(e.target.value);
-                            if (isNaN(val)) return;
+                    )}
+
+                    <div className={`flex items-center h-8 ${timeFormat === '12h' ? 'justify-end' : ''}`}>
+                      <label className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-stone-500' : 'text-stone-400'}`}>Minute</label>
+                    </div>
+
+                    {/* Inputs Row */}
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        min={timeFormat === '12h' ? 1 : 0}
+                        max={timeFormat === '12h' ? 12 : 23}
+                        value={timeFormat === '12h' ? (localTime.hour % 12 || 12) : localTime.hour}
+                        onChange={(e) => {
+                          let val = parseInt(e.target.value);
+                          if (isNaN(val)) return;
+                          
+                          if (timeFormat === '12h') {
+                            if (val < 1) val = 1;
+                            if (val > 12) val = 12;
+                            const isPm = localTime.hour >= 12;
+                            let newHour = val % 12;
+                            if (isPm) newHour += 12;
+                            handleTimeSelect(newHour, localTime.minute, 'source');
+                          } else {
                             if (val < 0) val = 0;
-                            if (val > 59) val = 59;
-                            handleTimeSelect(localTime.hour, val, 'source');
-                          }}
-                          className={`w-full px-3 py-2 rounded-xl border font-mono text-sm transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
-                            theme === 'light' 
-                              ? 'bg-stone-50 border-stone-100 text-stone-800' 
-                              : 'bg-stone-800/50 border-stone-700 text-stone-100'
-                          }`}
-                        />
+                            if (val > 23) val = 23;
+                            handleTimeSelect(val, localTime.minute, 'source');
+                          }
+                        }}
+                        className={`w-full px-4 py-3 rounded-2xl border font-mono text-base transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
+                          theme === 'light' 
+                            ? 'bg-stone-50 border-stone-100 text-stone-800' 
+                            : 'bg-stone-800/50 border-stone-700 text-stone-100'
+                        }`}
+                      />
+                    </div>
+
+                    {timeFormat === '12h' && (
+                      <div className="flex items-center justify-center">
+                        <span className={`text-xl font-mono ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}>:</span>
                       </div>
+                    )}
+
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        min="0" 
+                        max="59" 
+                        value={localTime.minute}
+                        onChange={(e) => {
+                          let val = parseInt(e.target.value);
+                          if (isNaN(val)) return;
+                          if (val < 0) val = 0;
+                          if (val > 59) val = 59;
+                          handleTimeSelect(localTime.hour, val, 'source');
+                        }}
+                        className={`w-full px-4 py-3 rounded-2xl border font-mono text-base transition-all focus:ring-2 focus:ring-emerald-500/20 outline-none ${
+                          theme === 'light' 
+                            ? 'bg-stone-50 border-stone-100 text-stone-800' 
+                            : 'bg-stone-800/50 border-stone-700 text-stone-100'
+                        }`}
+                      />
                     </div>
                   </div>
                 </div>
@@ -837,20 +852,35 @@ export default function App() {
           </div>
 
           <AnimatePresence>
-            {isLive && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-stone-300' : 'text-stone-700'}`}
-              >
-                Live Sync Active
-              </motion.div>
-            )}
+            {/* Live Sync Active text removed */}
           </AnimatePresence>
         </div>
 
       </div>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {syncMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100]"
+          >
+            <div className={`px-6 py-3 rounded-2xl shadow-2xl border flex items-center gap-3 backdrop-blur-xl ${
+              syncStatus === 'success' 
+                ? 'bg-emerald-500/90 border-emerald-400 text-white' 
+                : syncStatus === 'error'
+                  ? 'bg-red-500/90 border-red-400 text-white'
+                  : theme === 'light' ? 'bg-white/90 border-stone-200 text-stone-800' : 'bg-stone-900/90 border-stone-800 text-stone-100'
+            }`}>
+              {syncStatus === 'success' && <Clock className="w-4 h-4" />}
+              {syncStatus === 'error' && <X className="w-4 h-4" />}
+              <span className="text-sm font-medium tracking-tight">{syncMessage}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Close search when clicking outside */}
       {isSearching && (
